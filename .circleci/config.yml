@@ -1,0 +1,17 @@
+version: 2
+jobs:
+  build:
+    working_directory: /go/src/github.com/SignifAi/snap-plugin-processor-split-regexp
+    docker:
+      - image: circleci/golang:1.8.1
+    steps:
+      - checkout
+      - run:
+          command: |
+            echo "Fetching glide; note GOPATH is $GOPATH"
+            curl http://glide.sh/get | /bin/bash
+            echo "Building"
+            git config --global url.git@github.com:.insteadOf https://github.com/
+            make
+            echo "Testing"
+            make test-small
