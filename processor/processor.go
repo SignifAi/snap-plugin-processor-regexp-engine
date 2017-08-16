@@ -199,7 +199,7 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 	for _, regex := range regexes {
 		for _, current := range workspace {
 			splits := regex.Split(current, -1)
-			product = append(product, ...splits)
+			product = append(product, splits...)
 		}
 		workspace = product
 		product = make([]string, 0)
