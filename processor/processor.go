@@ -74,12 +74,15 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	}
 	parseRegexes = compileRegexes(parseRegexesRaw)
 
-	splitRgx, err := getCheckConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
 	newMetrics := make([]plugin.Metric, 0)
+
+	if splitRegexes != nil {
+		var newMetrics []plugin.Metric
+		for _, m := range metrics {
+			newMetrics = append(newMetrics, ...splitMetric(m, splitRegexes))
+		}
+		metrics = newMetrics
+	}
 
 	for _, m := range metrics {
 		logBlock, ok := m.Data.(string)
