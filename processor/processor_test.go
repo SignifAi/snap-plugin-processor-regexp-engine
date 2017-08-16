@@ -21,6 +21,7 @@ limitations under the License.
 package processor
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -52,10 +53,13 @@ func TestProcessor(t *testing.T) {
 func TestProcess(t *testing.T) {
 	Convey("Test processing of metrics with correct configuration", t, func() {
 		newPlugin := New()
-		var regexps []string
-		regexps = append(regexps, `\|`)
+		var splitRegexps []string
+		splitRegexps = append(splitRegexps, `\|`)
+		var parseRegexps []string
+		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)`)
 		config := plugin.Config{}
-		config[configSplitRegexp] = defaultSplitRegexp
+		config[configSplitRegexp] = splitRegexps
+		config[configParseRegexp] = parseRegexps
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -78,8 +82,9 @@ func TestProcess(t *testing.T) {
 
 			So(err, ShouldBeNil)
 			So(len(metrics), ShouldEqual, 3)
-			for _, metric := range metrics {
+			for i, metric := range metrics {
 				So(metric.Tags["hello"], ShouldEqual, "world")
+				So(metric.Tags["feature_name"], ShouldEqual, strconv.FormatInt(i+1))
 			}
 
 		})
