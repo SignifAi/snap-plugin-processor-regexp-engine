@@ -94,7 +94,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
 			continue
 		}
-		subBlocks, err := parse(logBlock, splitRgx)
+		newTags, matchCnt, err := parse(logBlock, parseRegexes)
 		if err != nil {
 			warnFields := map[string]interface{}{
 				"namespace":       m.Namespace.Strings(),
@@ -103,12 +103,6 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			}
 			log.WithFields(warnFields).Warn(err)
 			continue
-		}
-
-		for _, block := range subBlocks {
-			newMetric := m
-			newMetric.Data = block
-			newMetrics = append(newMetrics, newMetric)
 		}
 	}
 	return newMetrics, nil
@@ -135,9 +129,24 @@ func getCheckConfig(cfg plugin.Config) (*regexp.Regexp, error) {
 	return splitRgx, nil
 }
 
-func parse(message string, rgx *regexp.Regexp) ([]string, error) {
-	subBlocks := rgx.Split(message, -1)
-	return subBlocks, nil
+func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, error) {
+	var fields map[string]string
+	var matchCnt int = 0
+	for _, regex := range regexes {
+		match := regex.FindStringSubmatch(message)
+		if match != nil {
+			matchCnt++
+		}
+		for i, name := range rgx.SubexpNames() {
+			if i > 0 && i <= len(match) {
+				if fields == nil {
+					fields = make(map[string]string, 0)
+				}
+				fields[name] = match[i]
+			}
+		}
+	}
+	return fields, nil
 }
 
 func compileRegexes(from []string) ([]*regexp.Regexp, error) {
