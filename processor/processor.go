@@ -116,16 +116,25 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 					}
 
 					if newTags != nil {
-						if n.Tags == nil {
-							n.Tags = make(map[string]string, len(newTags))
-						}
+						// Because we've split the metric,
+						// there's a chance we're using the
+						// same tags pointer. So if we need
+						// to merge from this one split, we
+						// need to create a whole new tags
+						// map.
+						oldTags := n.Tags
+						n.Tags = make(map[string]string)
+
 						for nf_key, nf_value := range newTags {
+							n.Tags[nf_key] = nf_value
+						}
+
+						for nf_key, nf_value := range oldTags {
 							n.Tags[nf_key] = nf_value
 						}
 					}
 
 					// Tags templating here
-
 					newMetrics = append(newMetrics, n)
 				}
 			}
