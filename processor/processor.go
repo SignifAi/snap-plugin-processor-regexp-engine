@@ -125,13 +125,14 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 						oldTags := n.Tags
 						n.Tags = make(map[string]string)
 
+						for nf_key, nf_value := range oldTags {
+							n.Tags[nf_key] = nf_value
+						}
+
 						for nf_key, nf_value := range newTags {
 							n.Tags[nf_key] = nf_value
 						}
 
-						for nf_key, nf_value := range oldTags {
-							n.Tags[nf_key] = nf_value
-						}
 					}
 
 					// Tags templating here
