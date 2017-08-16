@@ -63,16 +63,23 @@ func (p *Plugin) GetConfigPolicy() (plugin.ConfigPolicy, error) {
 func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.Metric, error) {
 	// Configuration
 	var splitRegexes, parseRegexes []*regexp.Regexp
+	var err error
 	splitRegexesRaw, ok := cfg[configSplitRegexp].([]string)
 	if ok {
-		splitRegexes, err := compileRegexes(splitRegexesRaw)
+		splitRegexes, err = compileRegexes(splitRegexesRaw)
+		if err != nil {
+			return nil, fmt.Errorf("Couldn't compile split regexes", splitRegexesRaw)
+		}
 	}
 
 	parseRegexesRaw, ok := cfg[configParseRegexp].([]string)
 	if !ok {
 		return nil, fmt.Errorf("Must specify parse regexps at least")
 	}
-	parseRegexes = compileRegexes(parseRegexesRaw)
+	parseRegexes, err = compileRegexes(parseRegexesRaw)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to compile a regex", err)
+	}
 
 	newMetrics := make([]plugin.Metric, 0)
 
@@ -160,7 +167,7 @@ func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, er
 		if match != nil {
 			matchCnt++
 		}
-		for i, name := range rgx.SubexpNames() {
+		for i, name := range regex.SubexpNames() {
 			if i > 0 && i <= len(match) {
 				if fields == nil {
 					fields = make(map[string]string, 0)
@@ -169,11 +176,11 @@ func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, er
 			}
 		}
 	}
-	return fields, nil
+	return fields, matchCnt, nil
 }
 
 func compileRegexes(from []string) ([]*regexp.Regexp, error) {
-	regexes = []*regexp.Regexp
+	var regexes []*regexp.Regexp
 	for _, expr := range from {
 		regex, err := regexp.Compile(expr)
 		if err != nil {
@@ -212,7 +219,7 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 			Namespace: metric.Namespace,
 			Version: metric.Version,
 			Config: metric.Config,
-			Data: workspace[idx],
+			Data: split,
 			Tags: metric.Tags,
 			Timestamp: metric.Timestamp,
 			Unit: metric.Unit,
