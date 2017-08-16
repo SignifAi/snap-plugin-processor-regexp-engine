@@ -21,7 +21,7 @@ limitations under the License.
 package processor
 
 import (
-	"strconv"
+	"regexp"
 	"testing"
 	"time"
 
@@ -56,7 +56,7 @@ func TestProcess(t *testing.T) {
 		var splitRegexps []string
 		splitRegexps = append(splitRegexps, `\|`)
 		var parseRegexps []string
-		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)`)
+		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
 		config := plugin.Config{}
 		config[configSplitRegexp] = splitRegexps
 		config[configParseRegexp] = parseRegexps
@@ -82,9 +82,11 @@ func TestProcess(t *testing.T) {
 
 			So(err, ShouldBeNil)
 			So(len(metrics), ShouldEqual, 3)
-			for i, metric := range metrics {
+			for _, metric := range metrics {
 				So(metric.Tags["hello"], ShouldEqual, "world")
-				So(metric.Tags["feature_name"], ShouldEqual, strconv.FormatInt(i+1))
+				re, _ := regexp.Compile(parseRegexps[0])
+				match := re.FindStringSubmatch(metric.Data.(string))
+				So(metric.Tags["feature_name"], ShouldEqual, match[1])
 			}
 
 		})
@@ -115,7 +117,12 @@ func TestProcess(t *testing.T) {
 	Convey("Test processing of metrics with unexpected log message", t, func() {
 		newPlugin := New()
 		config := plugin.Config{}
-		config[configSplitRegexp] = defaultSplitRegexp
+		var splitRegexps, parseRegexps []string
+		splitRegexps = append(splitRegexps, `\|`)
+		config[configSplitRegexp] = splitRegexps
+		parseRegexps = append(parseRegexps, `.*`)
+		config[configParseRegexp] = parseRegexps
+		//config[configSplitRegexp] = defaultSplitRegexp
 
 		Convey("Unexpected metric data type", func() {
 			mts := []plugin.Metric{

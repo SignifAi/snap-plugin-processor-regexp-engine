@@ -32,13 +32,13 @@ const (
 	//Version of the plugin
 	Version = 1
 
-	configSplitRegexp  = "split_on"
+	configSplitRegexp = "split_on"
 	configParseRegexp = "regexps"
-	configShouldEmit = "should_emit"
-	configAddTags = "tags"
+	configShouldEmit  = "should_emit"
+	configAddTags     = "tags"
 
 	// When to emit potentially-modified metrics
-	shouldEmitAlways = "always" // no matter what
+	shouldEmitAlways       = "always"      // no matter what
 	shouldEmitOnAllSuccess = "all_success" // only if all match
 	shouldEmitOnAnySuccess = "any_success" // only if at least one matches
 )
@@ -68,7 +68,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	if ok {
 		splitRegexes, err = compileRegexes(splitRegexesRaw)
 		if err != nil {
-			return nil, fmt.Errorf("Couldn't compile split regexes", splitRegexesRaw)
+			return nil, fmt.Errorf("Couldn't compile split regexes: %v", splitRegexesRaw)
 		}
 	}
 
@@ -78,13 +78,12 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	}
 	parseRegexes, err = compileRegexes(parseRegexesRaw)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to compile a regex", err)
+		return nil, fmt.Errorf("Failed to compile a regex: %v", err)
 	}
 
 	newMetrics := make([]plugin.Metric, 0)
 
 	if splitRegexes != nil {
-		var newMetrics []plugin.Metric
 		for _, m := range metrics {
 			splitMetrics, err := splitMetric(m, splitRegexes)
 			if err == nil {
@@ -118,11 +117,10 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 
 					if newTags != nil {
 						if n.Tags == nil {
-							n.Tags = newTags
-						} else {
-							for nf_key, nf_value := range newTags {
-								n.Tags[nf_key] = nf_value
-							}
+							n.Tags = make(map[string]string, len(newTags))
+						}
+						for nf_key, nf_value := range newTags {
+							n.Tags[nf_key] = nf_value
 						}
 					}
 
@@ -133,6 +131,8 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			}
 		}
 		metrics = newMetrics
+	} else {
+		return nil, fmt.Errorf("No splitRegexes")
 	}
 
 	return newMetrics, nil
@@ -216,13 +216,13 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 	metrics = make([]plugin.Metric, len(workspace))
 	for idx, split := range workspace {
 		metrics[idx] = plugin.Metric{
-			Namespace: metric.Namespace,
-			Version: metric.Version,
-			Config: metric.Config,
-			Data: split,
-			Tags: metric.Tags,
-			Timestamp: metric.Timestamp,
-			Unit: metric.Unit,
+			Namespace:   metric.Namespace,
+			Version:     metric.Version,
+			Config:      metric.Config,
+			Data:        split,
+			Tags:        metric.Tags,
+			Timestamp:   metric.Timestamp,
+			Unit:        metric.Unit,
 			Description: metric.Description,
 		}
 	}
@@ -230,4 +230,3 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 	// And return it
 	return metrics, nil
 }
-
