@@ -52,6 +52,8 @@ func TestProcessor(t *testing.T) {
 func TestProcess(t *testing.T) {
 	Convey("Test processing of metrics with correct configuration", t, func() {
 		newPlugin := New()
+		var regexps []string
+		regexps = append(regexps, `\|`)
 		config := plugin.Config{}
 		config[configSplitRegexp] = defaultSplitRegexp
 

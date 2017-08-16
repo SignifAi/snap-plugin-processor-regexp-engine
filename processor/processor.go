@@ -79,32 +79,55 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	if splitRegexes != nil {
 		var newMetrics []plugin.Metric
 		for _, m := range metrics {
-			newMetrics = append(newMetrics, ...splitMetric(m, splitRegexes))
+			splitMetrics, err := splitMetric(m, splitRegexes)
+			if err == nil {
+				for _, n := range splitMetrics {
+					logBlock, ok := n.Data.(string)
+					if !ok {
+						warnFields := map[string]interface{}{
+							"namespace": n.Namespace.Strings(),
+							"data":      n.Data,
+						}
+						log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
+						continue
+					}
+					newTags, matchCnt, err := parse(logBlock, parseRegexes)
+					if err != nil {
+						warnFields := map[string]interface{}{
+							"namespace":       n.Namespace.Strings(),
+							"data":            n.Data,
+							configParseRegexp: parseRegexes,
+						}
+						log.WithFields(warnFields).Warn(err)
+						continue
+					}
+
+					shouldEmit, ok := cfg[configShouldEmit].(string)
+					if ok {
+						if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(parseRegexes)) {
+							continue
+						}
+					}
+
+					if newTags != nil {
+						if n.Tags == nil {
+							n.Tags = newTags
+						} else {
+							for nf_key, nf_value := range newTags {
+								n.Tags[nf_key] = nf_value
+							}
+						}
+					}
+
+					// Tags templating here
+
+					newMetrics = append(newMetrics, n)
+				}
+			}
 		}
 		metrics = newMetrics
 	}
 
-	for _, m := range metrics {
-		logBlock, ok := m.Data.(string)
-		if !ok {
-			warnFields := map[string]interface{}{
-				"namespace": m.Namespace.Strings(),
-				"data":      m.Data,
-			}
-			log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
-			continue
-		}
-		newTags, matchCnt, err := parse(logBlock, parseRegexes)
-		if err != nil {
-			warnFields := map[string]interface{}{
-				"namespace":       m.Namespace.Strings(),
-				"data":            m.Data,
-				configSplitRegexp: splitRgx,
-			}
-			log.WithFields(warnFields).Warn(err)
-			continue
-		}
-	}
 	return newMetrics, nil
 }
 
