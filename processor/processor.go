@@ -19,8 +19,10 @@ limitations under the License.
 package processor
 
 import (
+	"bytes"
 	"fmt"
 	"regexp"
+	"template"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/intelsdi-x/snap-plugin-lib-go/v1/plugin"
@@ -41,6 +43,7 @@ const (
 	shouldEmitAlways       = "always"      // no matter what
 	shouldEmitOnAllSuccess = "all_success" // only if all match
 	shouldEmitOnAnySuccess = "any_success" // only if at least one matches
+	shouldEmitOnNoSuccess  = "no_success"  // only if _none_ match (grep -v mode)
 )
 
 type Plugin struct {
@@ -106,9 +109,11 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 				}
 			}
 		}
-		metrics = newMetrics
 	} else {
-		return nil, fmt.Errorf("No splitRegexes")
+		newMetrics, err = processMetrics(metrics, parseRegexes, shouldEmit, tagsTemplates)
+		if err {
+			return nil, err
+		}
 	}
 
 	return newMetrics, nil
@@ -230,11 +235,11 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 			continue
 		}
 
-		if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(regexps)) {
+		if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(regexps) || (shouldEmit == shouldEmitOnNoSuccess && matchCnt > 0)) {
 			continue
 		}
 
-		if newTags != nil {
+		if newTags != nil || tagsTemplates != nil {
 			// Because we've split the metric,
 			// there's a chance we're using the
 			// same tags pointer. So if we need
@@ -258,4 +263,8 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 		newMetrics = append(newMetrics, n)
 	}
 	return newMetrics, nil
+}
+
+func evalTemplateWithMetric(metric plugin.Metric, template string) {
+
 }
