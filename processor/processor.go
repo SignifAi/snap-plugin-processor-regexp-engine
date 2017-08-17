@@ -64,6 +64,8 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	// Configuration
 	var splitRegexes, parseRegexes []*regexp.Regexp
 	var err error
+	var shouldEmit string
+	var tagsTemplates map[string]string
 	splitRegexesRaw, ok := cfg[configSplitRegexp].([]string)
 	if ok {
 		splitRegexes, err = compileRegexes(splitRegexesRaw)
@@ -82,61 +84,25 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	}
 
 	newMetrics := make([]plugin.Metric, 0)
+	shouldEmit, ok = cfg[configShouldEmit].(string)
+	if !ok {
+		// Default is always
+		shouldEmit = shouldEmitAlways
+	}
+
+	if shouldEmit != shouldEmitAlways && shouldEmit != shouldEmitOnAnySuccess && shouldEmit != shouldEmitOnAllSuccess {
+		return nil, fmt.Errorf("%v should be one of '%v', '%v' or '%v'", configShouldEmit, shouldEmitAlways, shouldEmitOnAnySuccess, shouldEmitOnAllSuccess)
+	}
 
 	if splitRegexes != nil {
 		for _, m := range metrics {
 			splitMetrics, err := splitMetric(m, splitRegexes)
 			if err == nil {
-				for _, n := range splitMetrics {
-					logBlock, ok := n.Data.(string)
-					if !ok {
-						warnFields := map[string]interface{}{
-							"namespace": n.Namespace.Strings(),
-							"data":      n.Data,
-						}
-						log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
-						continue
-					}
-					newTags, matchCnt, err := parse(logBlock, parseRegexes)
-					if err != nil {
-						warnFields := map[string]interface{}{
-							"namespace":       n.Namespace.Strings(),
-							"data":            n.Data,
-							configParseRegexp: parseRegexes,
-						}
-						log.WithFields(warnFields).Warn(err)
-						continue
-					}
-
-					shouldEmit, ok := cfg[configShouldEmit].(string)
-					if ok {
-						if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(parseRegexes)) {
-							continue
-						}
-					}
-
-					if newTags != nil {
-						// Because we've split the metric,
-						// there's a chance we're using the
-						// same tags pointer. So if we need
-						// to merge from this one split, we
-						// need to create a whole new tags
-						// map.
-						oldTags := n.Tags
-						n.Tags = make(map[string]string)
-
-						for nf_key, nf_value := range oldTags {
-							n.Tags[nf_key] = nf_value
-						}
-
-						for nf_key, nf_value := range newTags {
-							n.Tags[nf_key] = nf_value
-						}
-
-					}
-
-					// Tags templating here
-					newMetrics = append(newMetrics, n)
+				parsedMetrics, err := processMetrics(splitMetrics, parseRegexes, shouldEmit, tagsTemplates)
+				if err == nil {
+					newMetrics = append(newMetrics, parsedMetrics...)
+				} else {
+					return nil, err
 				}
 			}
 		}
@@ -239,4 +205,57 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 
 	// And return it
 	return metrics, nil
+}
+
+func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmit string, tagTemplates map[string]string) ([]plugin.Metric, error) {
+	var newMetrics []plugin.Metric
+	for _, n := range metrics {
+		logBlock, ok := n.Data.(string)
+		if !ok {
+			warnFields := map[string]interface{}{
+				"namespace": n.Namespace.Strings(),
+				"data":      n.Data,
+			}
+			log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
+			continue
+		}
+		newTags, matchCnt, err := parse(logBlock, regexps)
+		if err != nil {
+			warnFields := map[string]interface{}{
+				"namespace":       n.Namespace.Strings(),
+				"data":            n.Data,
+				configParseRegexp: regexps,
+			}
+			log.WithFields(warnFields).Warn(err)
+			continue
+		}
+
+		if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(regexps)) {
+			continue
+		}
+
+		if newTags != nil {
+			// Because we've split the metric,
+			// there's a chance we're using the
+			// same tags pointer. So if we need
+			// to merge from this one split, we
+			// need to create a whole new tags
+			// map.
+			oldTags := n.Tags
+			n.Tags = make(map[string]string)
+
+			for nf_key, nf_value := range oldTags {
+				n.Tags[nf_key] = nf_value
+			}
+
+			for nf_key, nf_value := range newTags {
+				n.Tags[nf_key] = nf_value
+			}
+
+		}
+
+		// Tags templating here
+		newMetrics = append(newMetrics, n)
+	}
+	return newMetrics, nil
 }
