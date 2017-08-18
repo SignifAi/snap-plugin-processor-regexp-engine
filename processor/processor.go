@@ -22,7 +22,7 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"template"
+	"text/template"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/intelsdi-x/snap-plugin-lib-go/v1/plugin"
@@ -68,7 +68,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	var splitRegexes, parseRegexes []*regexp.Regexp
 	var err error
 	var shouldEmit string
-	var tagsTemplates map[string]string
+	var tagsTemplates *template.Template
 	splitRegexesRaw, ok := cfg[configSplitRegexp].([]string)
 	if ok {
 		splitRegexes, err = compileRegexes(splitRegexesRaw)
@@ -84,6 +84,11 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	parseRegexes, err = compileRegexes(parseRegexesRaw)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to compile a regex: %v", err)
+	}
+
+	tagTemplatesRaw, ok := cfg[configAddTags].(map[string]string)
+	if ok {
+		tagsTemplates, err = compileTemplates(tagTemplatesRaw)
 	}
 
 	newMetrics := make([]plugin.Metric, 0)
@@ -111,33 +116,12 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 		}
 	} else {
 		newMetrics, err = processMetrics(metrics, parseRegexes, shouldEmit, tagsTemplates)
-		if err {
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	return newMetrics, nil
-}
-
-func getCheckConfigVar(cfg plugin.Config, cfgVarName string) (*regexp.Regexp, error) {
-	expr, err := cfg.GetString(cfgVarName)
-	if err != nil {
-		return nil, fmt.Errorf("%v: %v", cfgVarName, err)
-	}
-	rgx, err := regexp.Compile(expr)
-	if err != nil {
-		return nil, fmt.Errorf("%v: %v", cfgVarName, err)
-	}
-	return rgx, nil
-
-}
-func getCheckConfig(cfg plugin.Config) (*regexp.Regexp, error) {
-	splitRgx, err := getCheckConfigVar(cfg, configSplitRegexp)
-	if err != nil {
-		return nil, err
-	}
-
-	return splitRgx, nil
 }
 
 func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, error) {
@@ -170,6 +154,25 @@ func compileRegexes(from []string) ([]*regexp.Regexp, error) {
 		regexes = append(regexes, regex)
 	}
 	return regexes, nil
+}
+
+func compileTemplates(templates map[string]string) (*template.Template, error) {
+	rootTemplate := template.New("")
+	for tag, tagTemplate := range templates {
+		if tag == "" {
+			// nope
+			continue
+		}
+		newTagTemplate := rootTemplate.New(tag)
+		if newTagTemplate == nil {
+			return nil, fmt.Errorf("Couldn't create template for tag %v", tag)
+		}
+		newTagTemplate, err := newTagTemplate.Parse(tagTemplate)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return rootTemplate, nil
 }
 
 func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metric, error) {
@@ -212,7 +215,7 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 	return metrics, nil
 }
 
-func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmit string, tagTemplates map[string]string) ([]plugin.Metric, error) {
+func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmit string, tagsTemplates *template.Template) ([]plugin.Metric, error) {
 	var newMetrics []plugin.Metric
 	for _, n := range metrics {
 		logBlock, ok := n.Data.(string)
@@ -260,11 +263,43 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 		}
 
 		// Tags templating here
+		if tagsTemplates != nil {
+			newTags, err := executeTemplates(n, tagsTemplates)
+			if err != nil {
+				warnFields := map[string]interface{}{
+					"namespace":       n.Namespace.Strings(),
+					"data":            n.Data,
+					"template":        tagsTemplates.DefinedTemplates(),
+				}
+				log.WithFields(warnFields).Warn(err)
+				continue
+			}
+			for nf_key, nf_value := range newTags {
+				n.Tags[nf_key] = nf_value
+			}
+		}
 		newMetrics = append(newMetrics, n)
 	}
 	return newMetrics, nil
 }
 
-func evalTemplateWithMetric(metric plugin.Metric, template string) {
+func executeTemplates(metric plugin.Metric, template *template.Template) (map[string]string, error) {
+	var results map[string]string = make(map[string]string)
+	var execBuffer *bytes.Buffer = bytes.NewBufferString("")
+	var err error
 
+	for _, tpl := range template.Templates() {
+		if tpl.Name() == "" {
+			// nope
+			continue
+		}
+
+		err = tpl.Execute(execBuffer, metric)
+		if err != nil {
+			return nil, err
+		}
+		results[tpl.Name()] = execBuffer.String()
+		execBuffer.Reset()
+	}
+	return results, nil
 }
