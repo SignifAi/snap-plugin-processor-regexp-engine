@@ -267,9 +267,9 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 			newTags, err := executeTemplates(n, tagsTemplates)
 			if err != nil {
 				warnFields := map[string]interface{}{
-					"namespace":       n.Namespace.Strings(),
-					"data":            n.Data,
-					"template":        tagsTemplates.DefinedTemplates(),
+					"namespace": n.Namespace.Strings(),
+					"data":      n.Data,
+					"template":  tagsTemplates.DefinedTemplates(),
 				}
 				log.WithFields(warnFields).Warn(err)
 				continue

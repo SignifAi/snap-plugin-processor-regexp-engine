@@ -60,6 +60,10 @@ func TestProcess(t *testing.T) {
 		config := plugin.Config{}
 		config[configSplitRegexp] = splitRegexps
 		config[configParseRegexp] = parseRegexps
+		var tagsTemplates map[string]string = make(map[string]string, 1)
+		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
+		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
+		config[configAddTags] = tagsTemplates
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -71,7 +75,8 @@ func TestProcess(t *testing.T) {
 					Namespace: plugin.NewNamespace("intel", "logs", "metric", "log", "message"),
 					Timestamp: time.Now(),
 					Tags: map[string]string{
-						"hello": "world",
+						"hello":     "world",
+						"replaceme": "boo",
 					},
 					Data: logs[i],
 				}
@@ -87,6 +92,8 @@ func TestProcess(t *testing.T) {
 				re, _ := regexp.Compile(parseRegexps[0])
 				match := re.FindStringSubmatch(metric.Data.(string))
 				So(metric.Tags["feature_name"], ShouldEqual, match[1])
+				So(metric.Tags["replaceme"], ShouldEqual, "yay: "+match[1])
+				So(metric.Tags["replaceme_old"], ShouldEqual, "boo")
 			}
 
 		})
