@@ -98,8 +98,8 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 		shouldEmit = shouldEmitAlways
 	}
 
-	if shouldEmit != shouldEmitAlways && shouldEmit != shouldEmitOnAnySuccess && shouldEmit != shouldEmitOnAllSuccess {
-		return nil, fmt.Errorf("%v should be one of '%v', '%v' or '%v'", configShouldEmit, shouldEmitAlways, shouldEmitOnAnySuccess, shouldEmitOnAllSuccess)
+	if shouldEmit != shouldEmitAlways && shouldEmit != shouldEmitOnAnySuccess && shouldEmit != shouldEmitOnAllSuccess && shouldEmit != shouldEmitOnNoSuccess {
+		return nil, fmt.Errorf("%v should be one of '%v', '%v', '%v' or '%v'", configShouldEmit, shouldEmitAlways, shouldEmitOnAnySuccess, shouldEmitOnAllSuccess, shouldEmitOnNoSuccess)
 	}
 
 	if splitRegexes != nil {
