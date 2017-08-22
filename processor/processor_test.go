@@ -53,17 +53,19 @@ func TestProcessor(t *testing.T) {
 func TestProcess(t *testing.T) {
 	Convey("Test processing of metrics with correct configuration (all features)", t, func() {
 		newPlugin := New()
+		var matchMap map[string]interface{} = make(map[string]interface{})
 		var splitRegexps []string
 		splitRegexps = append(splitRegexps, `\|`)
+		matchMap[configSplitRegexp] = splitRegexps
 		var parseRegexps []string
 		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
+		matchMap[configParseRegexp] = parseRegexps
 		config := plugin.Config{}
-		config[configSplitRegexp] = splitRegexps
-		config[configParseRegexp] = parseRegexps
 		var tagsTemplates map[string]string = make(map[string]string, 1)
 		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
-		config[configAddTags] = tagsTemplates
+		matchMap[configAddTags] = tagsTemplates
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -99,84 +101,6 @@ func TestProcess(t *testing.T) {
 		})
 	})
 
-	Convey("Test processing of metrics with correct configuration (parse only)", t, func() {
-		newPlugin := New()
-		var parseRegexps []string
-		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
-		config := plugin.Config{}
-		config[configParseRegexp] = parseRegexps
-
-		Convey("Testing with a sample", func() {
-			logs := []string{
-				`feature 1`,
-			}
-			mts := make([]plugin.Metric, 0)
-			for i := range logs {
-				mt := plugin.Metric{
-					Namespace: plugin.NewNamespace("intel", "logs", "metric", "log", "message"),
-					Timestamp: time.Now(),
-					Tags: map[string]string{
-						"hello": "world",
-					},
-					Data: logs[i],
-				}
-				mts = append(mts, mt)
-			}
-
-			metrics, err := newPlugin.Process(mts, config)
-
-			So(err, ShouldBeNil)
-			So(len(metrics), ShouldEqual, 1)
-			for _, metric := range metrics {
-				So(metric.Tags["hello"], ShouldEqual, "world")
-				re, _ := regexp.Compile(parseRegexps[0])
-				match := re.FindStringSubmatch(metric.Data.(string))
-				So(metric.Tags["feature_name"], ShouldEqual, match[1])
-			}
-
-		})
-	})
-
-	Convey("Test grep -v mode", t, func() {
-		newPlugin := New()
-		var parseRegexps []string
-		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
-		config := plugin.Config{}
-		config[configParseRegexp] = parseRegexps
-		config[configShouldEmit] = shouldEmitOnNoSuccess
-
-		Convey("Testing with a sample", func() {
-			logs := []string{
-				`feature 1`,
-				`antipattern 2`,
-			}
-			mts := make([]plugin.Metric, 0)
-			for i := range logs {
-				mt := plugin.Metric{
-					Namespace: plugin.NewNamespace("intel", "logs", "metric", "log", "message"),
-					Timestamp: time.Now(),
-					Tags: map[string]string{
-						"hello": "world",
-					},
-					Data: logs[i],
-				}
-				mts = append(mts, mt)
-			}
-
-			metrics, err := newPlugin.Process(mts, config)
-
-			So(err, ShouldBeNil)
-			So(len(metrics), ShouldEqual, 1)
-			for _, metric := range metrics {
-				So(metric.Tags["hello"], ShouldEqual, "world")
-				re, _ := regexp.Compile(parseRegexps[0])
-				match := re.FindStringSubmatch(metric.Data.(string))
-				So(match, ShouldBeNil)
-			}
-
-		})
-	})
-
 	Convey("Test processing of metrics with errors", t, func() {
 		newPlugin := New()
 
@@ -202,12 +126,13 @@ func TestProcess(t *testing.T) {
 	Convey("Test processing of metrics with unexpected log message", t, func() {
 		newPlugin := New()
 		config := plugin.Config{}
+		var matchMap map[string]interface{} = make(map[string]interface{})
 		var splitRegexps, parseRegexps []string
 		splitRegexps = append(splitRegexps, `\|`)
-		config[configSplitRegexp] = splitRegexps
+		matchMap[configSplitRegexp] = splitRegexps
 		parseRegexps = append(parseRegexps, `.*`)
-		config[configParseRegexp] = parseRegexps
-		//config[configSplitRegexp] = defaultSplitRegexp
+		matchMap[configParseRegexp] = parseRegexps
+		config[".*"] = matchMap
 
 		Convey("Unexpected metric data type", func() {
 			mts := []plugin.Metric{

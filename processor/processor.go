@@ -34,19 +34,18 @@ const (
 	//Version of the plugin
 	Version = 1
 
-	configSplitRegexp = "split_on"
-	configParseRegexp = "regexps"
-	configShouldEmit  = "should_emit"
+	configSplitRegexp = "split"
+	configParseRegexp = "parse"
 	configAddTags     = "tags"
-
-	// When to emit potentially-modified metrics
-	shouldEmitAlways       = "always"      // no matter what
-	shouldEmitOnAllSuccess = "all_success" // only if all match
-	shouldEmitOnAnySuccess = "any_success" // only if at least one matches
-	shouldEmitOnNoSuccess  = "no_success"  // only if _none_ match (grep -v mode)
 )
 
 type Plugin struct {
+}
+
+type internalConfig struct {
+	Parse    []*regexp.Regexp
+	Split    []*regexp.Regexp
+	Template *template.Template
 }
 
 // New() returns a new instance of the plugin
@@ -58,80 +57,116 @@ func New() *Plugin {
 // GetConfigPolicy returns the config policy
 func (p *Plugin) GetConfigPolicy() (plugin.ConfigPolicy, error) {
 	policy := plugin.NewConfigPolicy()
-	policy.AddNewStringRule([]string{""}, configShouldEmit, false, plugin.SetDefaultString(shouldEmitAlways))
 	return *policy, nil
 }
 
 // Process processes the data
 func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.Metric, error) {
 	// Configuration
-	var splitRegexes, parseRegexes []*regexp.Regexp
 	var err error
-	var shouldEmit string
 	var tagsTemplates *template.Template
-	splitRegexesRaw, ok := cfg[configSplitRegexp].([]string)
-	if ok {
-		splitRegexes, err = compileRegexes(splitRegexesRaw)
-		if err != nil {
-			return nil, fmt.Errorf("Couldn't compile split regexes: %v", splitRegexesRaw)
-		}
-	}
+	var internalCfg map[*regexp.Regexp]internalConfig = make(map[*regexp.Regexp]internalConfig)
+	var splitRegexes, parseRegexes []*regexp.Regexp
+	var mapRegex *regexp.Regexp
+	var singletonList []plugin.Metric
+	var didMatch bool
+	var parsedMetrics, newMetrics []plugin.Metric
 
-	parseRegexesRaw, ok := cfg[configParseRegexp].([]string)
-	if !ok {
-		return nil, fmt.Errorf("Must specify parse regexps at least")
-	}
-	parseRegexes, err = compileRegexes(parseRegexesRaw)
-	if err != nil {
-		return nil, fmt.Errorf("Failed to compile a regex: %v", err)
-	}
-
-	tagTemplatesRaw, ok := cfg[configAddTags].(map[string]string)
-	if ok {
-		tagsTemplates, err = compileTemplates(tagTemplatesRaw)
-	}
-
-	newMetrics := make([]plugin.Metric, 0)
-	shouldEmit, ok = cfg[configShouldEmit].(string)
-	if !ok {
-		// Default is always
-		shouldEmit = shouldEmitAlways
-	}
-
-	if shouldEmit != shouldEmitAlways && shouldEmit != shouldEmitOnAnySuccess && shouldEmit != shouldEmitOnAllSuccess && shouldEmit != shouldEmitOnNoSuccess {
-		return nil, fmt.Errorf("%v should be one of '%v', '%v', '%v' or '%v'", configShouldEmit, shouldEmitAlways, shouldEmitOnAnySuccess, shouldEmitOnAllSuccess, shouldEmitOnNoSuccess)
-	}
-
-	if splitRegexes != nil {
-		for _, m := range metrics {
-			splitMetrics, err := splitMetric(m, splitRegexes)
-			if err == nil {
-				parsedMetrics, err := processMetrics(splitMetrics, parseRegexes, shouldEmit, tagsTemplates)
-				if err == nil {
-					newMetrics = append(newMetrics, parsedMetrics...)
-				} else {
-					return nil, err
-				}
-			}
-		}
-	} else {
-		newMetrics, err = processMetrics(metrics, parseRegexes, shouldEmit, tagsTemplates)
+	for rawRegex, interfaceRegexCfg := range cfg {
+		mapRegex, err = regexp.Compile(rawRegex)
 		if err != nil {
 			return nil, err
+		}
+
+		rawRegexCfg, ok := interfaceRegexCfg.(map[string]interface{})
+
+		splitRegexesRaw, ok := rawRegexCfg[configSplitRegexp].([]string)
+		if ok {
+			splitRegexes, err = compileRegexes(splitRegexesRaw)
+			if err != nil {
+				return nil, fmt.Errorf("Couldn't compile split regexes: %v", splitRegexesRaw)
+			}
+		}
+
+		parseRegexesRaw, ok := rawRegexCfg[configParseRegexp].([]string)
+		if !ok {
+			return nil, fmt.Errorf("Must specify parse regexps at least")
+		}
+		parseRegexes, err = compileRegexes(parseRegexesRaw)
+		if err != nil {
+			return nil, fmt.Errorf("Failed to compile a regex: %v", err)
+		}
+
+		tagTemplatesRaw, ok := rawRegexCfg[configAddTags].(map[string]string)
+		if ok {
+			tagsTemplates, err = compileTemplates(tagTemplatesRaw)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		internalCfg[mapRegex] = internalConfig{
+			Parse:    parseRegexes,
+			Split:    splitRegexes,
+			Template: tagsTemplates,
+		}
+	}
+
+	if len(internalCfg) < 1 {
+		return nil, fmt.Errorf("At least one match->parse block must be specified")
+	}
+
+	newMetrics = make([]plugin.Metric, 0)
+
+MetricIter:
+	for _, m := range metrics {
+		didMatch = false
+		for mustMatch, matchConfig := range internalCfg {
+			testStr, ok := m.Data.(string)
+			if !ok {
+				warnFields := map[string]interface{}{
+					"namespace": m.Namespace.Strings(),
+					"data":      m.Data,
+				}
+				log.WithFields(warnFields).Warn("Match Phase: unexpected data type, plugin processes only strings")
+				continue MetricIter
+			}
+			if mustMatch.FindStringSubmatch(testStr) != nil {
+				didMatch = true
+				if matchConfig.Split != nil {
+					splitMetrics, err := splitMetric(m, matchConfig.Split)
+					if err == nil {
+						parsedMetrics, err = processMetrics(splitMetrics, matchConfig.Parse, mustMatch, matchConfig.Template)
+						if err != nil {
+							return nil, err
+						}
+					}
+				} else {
+					singletonList = make([]plugin.Metric, 1)
+					singletonList = append(singletonList, m)
+					parsedMetrics, err = processMetrics(singletonList, matchConfig.Parse, mustMatch, matchConfig.Template)
+					if err != nil {
+						return nil, err
+					}
+				}
+				newMetrics = append(newMetrics, parsedMetrics...)
+			}
+		}
+
+		// If we matched, we parsed
+		// If we did not match, emit the "original"
+		if !didMatch {
+			newMetrics = append(newMetrics, m)
 		}
 	}
 
 	return newMetrics, nil
 }
 
-func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, error) {
+func parse(message string, regexes []*regexp.Regexp) (map[string]string, error) {
 	var fields map[string]string
-	var matchCnt int = 0
 	for _, regex := range regexes {
 		match := regex.FindStringSubmatch(message)
-		if match != nil {
-			matchCnt++
-		}
 		for i, name := range regex.SubexpNames() {
 			if i > 0 && i <= len(match) {
 				if fields == nil {
@@ -141,7 +176,7 @@ func parse(message string, regexes []*regexp.Regexp) (map[string]string, int, er
 			}
 		}
 	}
-	return fields, matchCnt, nil
+	return fields, nil
 }
 
 func compileRegexes(from []string) ([]*regexp.Regexp, error) {
@@ -215,7 +250,7 @@ func splitMetric(metric plugin.Metric, regexes []*regexp.Regexp) ([]plugin.Metri
 	return metrics, nil
 }
 
-func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmit string, tagsTemplates *template.Template) ([]plugin.Metric, error) {
+func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, mustMatch *regexp.Regexp, tagsTemplates *template.Template) ([]plugin.Metric, error) {
 	var newMetrics []plugin.Metric
 	for _, n := range metrics {
 		logBlock, ok := n.Data.(string)
@@ -227,7 +262,11 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 			log.WithFields(warnFields).Warn("unexpected data type, plugin processes only strings")
 			continue
 		}
-		newTags, matchCnt, err := parse(logBlock, regexps)
+		if mustMatch.FindStringSubmatch(logBlock) == nil {
+			continue
+		}
+
+		newTags, err := parse(logBlock, regexps)
 		if err != nil {
 			warnFields := map[string]interface{}{
 				"namespace":       n.Namespace.Strings(),
@@ -235,10 +274,6 @@ func processMetrics(metrics []plugin.Metric, regexps []*regexp.Regexp, shouldEmi
 				configParseRegexp: regexps,
 			}
 			log.WithFields(warnFields).Warn(err)
-			continue
-		}
-
-		if (shouldEmit == shouldEmitOnAnySuccess && matchCnt == 0) || (shouldEmit == shouldEmitOnAllSuccess && matchCnt < len(regexps) || (shouldEmit == shouldEmitOnNoSuccess && matchCnt > 0)) {
 			continue
 		}
 
