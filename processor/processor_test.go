@@ -101,6 +101,101 @@ func TestProcess(t *testing.T) {
 		})
 	})
 
+	Convey("Test split with one metric not matching", t, func() {
+		newPlugin := New()
+		var matchMap map[string]interface{} = make(map[string]interface{})
+		var splitRegexps []string
+		splitRegexps = append(splitRegexps, `\|`)
+		matchMap[configSplitRegexp] = splitRegexps
+		var parseRegexps []string
+		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
+		matchMap[configParseRegexp] = parseRegexps
+		config := plugin.Config{}
+		var tagsTemplates map[string]string = make(map[string]string, 1)
+		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
+		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
+		matchMap[configAddTags] = tagsTemplates
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+
+		Convey("Testing with a sample", func() {
+			logs := []string{
+				`feature 1|antipattern 2|feature 3`,
+			}
+			mts := make([]plugin.Metric, 0)
+			for i := range logs {
+				mt := plugin.Metric{
+					Namespace: plugin.NewNamespace("intel", "logs", "metric", "log", "message"),
+					Timestamp: time.Now(),
+					Tags: map[string]string{
+						"hello":     "world",
+						"replaceme": "boo",
+					},
+					Data: logs[i],
+				}
+				mts = append(mts, mt)
+			}
+
+			metrics, err := newPlugin.Process(mts, config)
+
+			So(err, ShouldBeNil)
+			So(len(metrics), ShouldEqual, 2)
+			for _, metric := range metrics {
+				So(metric.Tags["hello"], ShouldEqual, "world")
+				re, _ := regexp.Compile(parseRegexps[0])
+				match := re.FindStringSubmatch(metric.Data.(string))
+				So(metric.Tags["feature_name"], ShouldEqual, match[1])
+				So(metric.Tags["replaceme"], ShouldEqual, "yay: "+match[1])
+				So(metric.Tags["replaceme_old"], ShouldEqual, "boo")
+			}
+
+		})
+	})
+
+	Convey("Test parse with exactly zero matches at all", t, func() {
+		newPlugin := New()
+		var matchMap map[string]interface{} = make(map[string]interface{})
+		var splitRegexps []string
+		splitRegexps = append(splitRegexps, `\|`)
+		matchMap[configSplitRegexp] = splitRegexps
+		var parseRegexps []string
+		parseRegexps = append(parseRegexps, `^feature (?P<feature_name>[A-Za-z0-9]*)$`)
+		matchMap[configParseRegexp] = parseRegexps
+		config := plugin.Config{}
+		var tagsTemplates map[string]string = make(map[string]string, 1)
+		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
+		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
+		matchMap[configAddTags] = tagsTemplates
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+
+		Convey("Testing with a sample", func() {
+			logs := []string{
+				`this must not match`,
+			}
+			mts := make([]plugin.Metric, 0)
+			for i := range logs {
+				mt := plugin.Metric{
+					Namespace: plugin.NewNamespace("intel", "logs", "metric", "log", "message"),
+					Timestamp: time.Now(),
+					Tags: map[string]string{
+						"hello":     "world",
+						"replaceme": "boo",
+					},
+					Data: logs[i],
+				}
+				mts = append(mts, mt)
+			}
+
+			metrics, err := newPlugin.Process(mts, config)
+
+			So(err, ShouldBeNil)
+			So(len(metrics), ShouldEqual, 1)
+			for _, metric := range metrics {
+				So(metric.Tags["hello"], ShouldEqual, "world")
+			}
+
+		})
+	})
+
 	Convey("Test processing of metrics with errors", t, func() {
 		newPlugin := New()
 
