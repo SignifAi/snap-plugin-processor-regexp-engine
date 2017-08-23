@@ -66,6 +66,16 @@ func TestProcess(t *testing.T) {
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
 		matchMap[configAddTags] = tagsTemplates
 		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+		// e.g.:
+		// config:
+		//  "^feature (?P<feature_name>[A-Za-z0-9]*":
+		//    parse:
+		//      - "^feature (?P<feature_name>[A-Za-z0-9]*"
+		//    split:
+		//      - "\|"
+		//    template:
+		//      replaceme: "yay: {{ .Tags.feature_name }}"
+		//      replaceme_old: "{{ .Tags.replaceme }}"
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
