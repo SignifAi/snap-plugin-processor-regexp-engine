@@ -93,7 +93,7 @@ If the metric matches more than one gate, it will be processed for each gate.
 
 Imagine a task manifest like:
 
-```
+```yaml
 ---
   version: 1
   schedule:
@@ -130,7 +130,7 @@ Imagine a task manifest like:
 
 And a list of metrics comes into the plugin like:
 
-```
+```json
 [{
   "Name": "/intel/logs/featurelistfile/message",
   "Value": "feature 1|feature 2|feature 3",
@@ -141,7 +141,7 @@ And a list of metrics comes into the plugin like:
 
 The resulting metrics list will be passed down like:
 
-```
+```json
 [{
   "Name": "/intel/logs/featurelistfile/message",
   "Value": "feature 1",
