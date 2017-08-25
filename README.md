@@ -171,21 +171,108 @@ The resulting metrics list will be passed down like:
 }]
 ```
 
-Once the task file has been created, you can create and watch the task.
-```
-$ snaptel task create -t tasks/signafai.yaml
-Using task manifest to create task
-Task created
-ID: 72869b36-def6-47c4-9db2-822f93bb9d1f
-Name: Task-72869b36-def6-47c4-9db2-822f93bb9d1f
-State: Running
+### Parse Details
 
-$ snaptel task list
-ID                                       NAME
-STATE     ...
-72869b36-def6-47c4-9db2-822f93bb9d1f
-Task-72869b36-def6-47c4-9db2-822f93bb9d1f    Running   ...
+#### Gating
+
+The configuration is a yaml dict where the keys are regexp matches --
+"gates" -- and the values are further dicts that express instructions
+on handling a metric with data matching the key. Take this sample config
+for instance:
+
+```yaml
+config:
+  "^<[^>]+> .*$":
+    parse:
+      - "<(?<user>[^>]+)> some IRC message"
 ```
+
+A metric with a value of "<zcarlson> test message" would gain a 
+'user' tag of 'zcarlson', while a metric with a value of "%some_other_value%"
+would pass through unprocessed.
+
+The next few sections will instruct how to define the parsing of string
+metrics that match this gate. 
+
+#### Split phase
+
+If you want to split the metrics based on a string (regexp), use the
+'split' key with a list value. The list is a list of regular expressions
+that will be used to split the string metrics. So for a 
+config like this:
+
+```yaml
+config:
+  ".*\\$.*\\|.*\\$.*":
+    split:
+      - '\\$'
+      - '\\|'
+    parse:
+      - '.*'
+```
+
+And a metric string value like `map1|key1$value1|map2$key2|value2`, you
+would get metrics with values "map1", "key1", "value1", "map2", "key2",
+"value2". The splits here are applied in the order they are defined.
+
+#### Match-again phase
+
+If a metric was split, the gate match is attempted against the split
+metric's value; if there is no match, the split metric is discarded. 
+
+#### Parse phase
+
+The `parse` key is required, and its value is also a list of regular
+expressions, again applied _in order_. For instance:
+
+```yaml
+config:
+  "instanceHostname\": \"([^\"]+)\"":
+    parse:
+      - 'instanceHostname\": \"(?P<hostname>[^\"]*)\"'
+      - 'otherHostname\": \"(?P<hostname>[^\"]+)\"'
+```
+
+For a metric with a JSON-like value like `{"instanceHostname": "myhost1"}`, 
+the `hostname` tag will be `myhost1`; however, if the JSON-value looked like:
+
+`{"instanceHostname": "myhost1", "otherHostname": "differenthost"}`
+
+The `hostname` tag would be "differenthost1". Remember, though, parse tags
+only get set on match, so JSON like this:
+
+`{"instanceHostname": "myhost1", "otherHostname": ""}`
+
+Would still see `hostname` set to "myhost1" (because the otherHostname
+value is empty and the regex requires at least one non-quote character). 
+
+As you might expect, JSON like:
+
+`{"instanceHostname": ""}`
+
+Will end up setting the `hostname` tag to an empty string.
+
+(If you want to do _just_ a split or template for some reason, you can
+set parse to a list containing only a ".*", but parsing is the primary
+intended use of the plugin)
+
+#### Template phase
+
+The metric is essentially filled out after the parse phase, but you can
+do some additional processing/tag-setting with 
+[golang templating](https://golang.org/pkg/text/template/) and the 
+`template` key, whose value is another dict where the keys are tag names
+and the values are golang templates (see the documentation linked) that
+provide the intended values for a tag. For instance:
+
+```
+config:
+  "instanceHostname\": \"(?P<host>[^\"]+)\":
+    parse:
+      - "instanceHostname\": \"(?P<host>[^\"]+)\""
+      - "instanceHttpPort\": (?P<port>)"
+    template:
+      url: "http://{{ .Tags.host }}:{{ .Tags.port }}/"
 
 ### Roadmap
 
