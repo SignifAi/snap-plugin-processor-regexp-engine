@@ -21,7 +21,7 @@ package main
 
 import (
 	"github.com/intelsdi-x/snap-plugin-lib-go/v1/plugin"
-	"github.com/signifai/snap-plugin-processor-regexp-o-matic/processor"
+	"github.com/signifai/snap-plugin-processor-regexp-engine/processor"
 	"google.golang.org/grpc"
 )
 

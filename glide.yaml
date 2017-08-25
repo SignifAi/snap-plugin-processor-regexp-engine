@@ -1,4 +1,4 @@
-package: github.com/SignifAi/snap-plugin-processor-regexp-o-matic
+package: github.com/SignifAi/snap-plugin-processor-regexp-engine
 import:
 - package: github.com/Sirupsen/logrus
   version: ^0.11.5
