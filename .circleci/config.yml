@@ -47,7 +47,7 @@ jobs:
       - persist_to_workspace:
           root: /srv
           paths:
-            - *.rpm
+            - "*.rpm"
   pushRPM:
     docker:
       - image: circleci/ruby:1.9
