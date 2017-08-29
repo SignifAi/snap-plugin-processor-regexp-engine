@@ -72,7 +72,7 @@ jobs:
             - "*.rpm"
   pushRPM:
     docker:
-      - image: circleci/ruby:1.9
+      - image: circleci/ruby:2.1
     steps:
       - attach_workspace:
           at: /srv
