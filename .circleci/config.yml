@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: /go/src/github.com/SignifAi/snap-plugin-processor-split-regexp
+    working_directory: /go/src/github.com/SignifAi/snap-plugin-processor-regexp-engine
     docker:
       - image: circleci/golang:1.8.1
     steps:
@@ -15,3 +15,72 @@ jobs:
             make
             echo "Testing"
             make test-small
+
+            mkdir /srv
+            cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
+            cp scripts/buildRPM.sh /srv/pkg
+            cp circleci-rpmspec.spec /srv
+      - persist_to_workspace:
+          root: /srv
+          paths:
+            - pkg
+            - snap-plugin-processor-regexp-engine
+  makeRPM:
+    docker:
+      - image: rpmbuild/centos6
+    steps:
+      - attach_workspace:
+          at: /srv
+      - run:
+          command: |
+            VERSION=${CIRCLE_TAG##v}
+
+            # Prepare the RPM spec
+            sed -i "s:VERSION:${VERSION}:g" circleci-rpmspec.spec
+
+            # Build the RPM
+            rpmbuild -bb circleci-rpmspec.spec
+
+            # Copy the RPM(s) back down to the workspace
+            # for later insertion into packagecloud
+            cp ~/rpmbuild/*.rpm /srv
+      - persist_to_workspace:
+          root: /srv
+          paths:
+            - *.rpm
+  pushRPM:
+    docker:
+      - image: circleci/ruby:1.9
+    steps:
+      - attach_workspace:
+          at: /srv
+      - run:
+          command: |
+            gem install package_cloud
+            for i in /srv/*.rpm; do
+                package_cloud push signifai/snap/el/6 $i
+            done
+workflows:
+  build2pushRPM:
+    - build:
+        filters:
+          tags:
+            only: /^v.*/
+    - makeRPM:
+        requires:
+          - build
+        filters:
+          tags:
+            only: /^v.*/
+          branches:
+            ignore: /.*/
+    - pushRPM:
+        requires:
+          - build
+          - makeRPM
+        filters:
+          tags:
+            only: /^v.*/
+          branches:
+            ignore: /.*/
+
