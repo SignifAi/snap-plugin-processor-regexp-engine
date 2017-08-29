@@ -65,7 +65,7 @@ jobs:
 
             # Copy the RPM(s) back down to the workspace
             # for later insertion into packagecloud
-            cp ~builder/rpm/*.rpm /srv
+            cp ~builder/rpm/x86_64/*.rpm /srv
       - persist_to_workspace:
           root: /srv
           paths:
