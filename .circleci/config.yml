@@ -26,23 +26,42 @@ jobs:
             - circleci-rpmspec.spec
   makeRPM:
     docker:
-      - image: rpmbuild/centos6
+      - image: centos:6
     steps:
       - attach_workspace:
           at: /srv
       - run:
           command: |
+            # Prepare to build the RPM
+            yum install -y gcc gcc-c++ libtool libtool-ltdl make cmake tar git pkgconfig sudo automake autoconf yum-utils rpm-build
+            yum clean all
+
+            useradd builder -u 1000 -m -G users,wheel
+            echo "builder ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
+            cat >/home/builder/.rpmmacros <<EOF
+            # macros
+            %_topdir /home/builder/rpm
+            %_sourcedir %{_topdir}
+            %_builddir %{_topdir}
+            %_specdir %{_topdir}
+            %_rpmdir %{_topdir}
+            %_srcrpmdir %{_topdir}
+            EOF
+            mkdir /home/builder/rpm
+            chown -R builder /home/builder
+
+            cd /srv
             VERSION=${CIRCLE_TAG##v}
 
             # Prepare the RPM spec
             sed -i "s:VERSION:${VERSION}:g" circleci-rpmspec.spec
 
             # Build the RPM
-            rpmbuild -bb circleci-rpmspec.spec
+            su - builder rpmbuild -bb circleci-rpmspec.spec
 
             # Copy the RPM(s) back down to the workspace
             # for later insertion into packagecloud
-            sudo cp ~/rpmbuild/*.rpm /srv
+            cp ~builder/rpm/*.rpm /srv
       - persist_to_workspace:
           root: /srv
           paths:
