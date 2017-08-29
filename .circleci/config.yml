@@ -56,6 +56,10 @@ jobs:
             # Prepare the RPM spec
             sed -i "s:VERSION:${VERSION}:g" circleci-rpmspec.spec
 
+            # Place the binary into SOURCES for the 'build'
+            cp /srv/snap-plugin-processor-regexp-engine /home/builder/rpm/
+            chown builder /home/builder/rpm/snap-plugin-processor-regexp-engine
+
             # Build the RPM
             su builder -c 'rpmbuild -bb circleci-rpmspec.spec'
 
