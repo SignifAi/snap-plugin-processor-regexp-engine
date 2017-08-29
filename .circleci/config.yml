@@ -75,11 +75,11 @@ jobs:
       - image: circleci/ruby:2.1
     steps:
       - attach_workspace:
-          at: /srv
+          at: /rpmout
       - run:
           command: |
             gem install package_cloud
-            for i in /srv/*.rpm; do
+            for i in /rpmout/*.rpm; do
                 package_cloud push signifai/snap/el/6 $i
             done
 workflows:
