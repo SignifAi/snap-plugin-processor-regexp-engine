@@ -15,9 +15,9 @@ jobs:
             make
             # XXX: for now if it builds it works
 
-            cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
-            cp scripts/buildRPM.sh /srv/pkg
-            cp circleci-rpmspec.spec /srv
+            sudo cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
+            sudo cp scripts/buildRPM.sh /srv/pkg
+            sudo cp circleci-rpmspec.spec /srv
       - persist_to_workspace:
           root: /srv
           paths:
@@ -42,7 +42,7 @@ jobs:
 
             # Copy the RPM(s) back down to the workspace
             # for later insertion into packagecloud
-            cp ~/rpmbuild/*.rpm /srv
+            sudo cp ~/rpmbuild/*.rpm /srv
       - persist_to_workspace:
           root: /srv
           paths:
