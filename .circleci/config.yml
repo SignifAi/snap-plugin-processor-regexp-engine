@@ -15,7 +15,6 @@ jobs:
             make
             # XXX: for now if it builds it works
 
-            mkdir /srv
             cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
             cp scripts/buildRPM.sh /srv/pkg
             cp circleci-rpmspec.spec /srv
@@ -24,6 +23,7 @@ jobs:
           paths:
             - pkg
             - snap-plugin-processor-regexp-engine
+            - circleci-rpmspec.spec
   makeRPM:
     docker:
       - image: rpmbuild/centos6
