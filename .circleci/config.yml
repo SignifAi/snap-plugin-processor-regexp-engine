@@ -57,7 +57,7 @@ jobs:
             sed -i "s:VERSION:${VERSION}:g" circleci-rpmspec.spec
 
             # Build the RPM
-            su - builder rpmbuild -bb circleci-rpmspec.spec
+            su builder -c 'rpmbuild -bb circleci-rpmspec.spec'
 
             # Copy the RPM(s) back down to the workspace
             # for later insertion into packagecloud
