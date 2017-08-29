@@ -63,25 +63,26 @@ jobs:
 workflows:
   version: 2
   build2pushRPM:
-    - build:
-        filters:
-          tags:
-            only: /^v.*/
-    - makeRPM:
-        requires:
-          - build
-        filters:
-          tags:
-            only: /^v.*/
-          branches:
-            ignore: /.*/
-    - pushRPM:
-        requires:
-          - build
-          - makeRPM
-        filters:
-          tags:
-            only: /^v.*/
-          branches:
-            ignore: /.*/
-
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v.*/
+      - makeRPM:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - pushRPM:
+          requires:
+            - build
+            - makeRPM
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+  
