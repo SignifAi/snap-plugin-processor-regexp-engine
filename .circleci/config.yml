@@ -61,6 +61,7 @@ jobs:
                 package_cloud push signifai/snap/el/6 $i
             done
 workflows:
+  version: 2
   build2pushRPM:
     - build:
         filters:
