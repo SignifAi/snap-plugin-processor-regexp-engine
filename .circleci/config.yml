@@ -13,15 +13,14 @@ jobs:
             echo "Building"
             git config --global url.git@github.com:.insteadOf https://github.com/
             make
-            # XXX: for now if it builds it works
+            echo "Testing"
+            make test
 
             sudo cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
-            sudo cp scripts/buildRPM.sh /srv/pkg
             sudo cp circleci-rpmspec.spec /srv
       - persist_to_workspace:
           root: /srv
           paths:
-            - pkg
             - snap-plugin-processor-regexp-engine
             - circleci-rpmspec.spec
   makeRPM:
