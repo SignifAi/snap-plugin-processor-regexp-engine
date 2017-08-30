@@ -14,7 +14,7 @@ jobs:
             git config --global url.git@github.com:.insteadOf https://github.com/
             make
             echo "Testing"
-            make test
+            make test-small
 
             sudo cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
             sudo cp circleci-rpmspec.spec /srv
