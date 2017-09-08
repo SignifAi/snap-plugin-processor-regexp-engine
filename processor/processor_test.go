@@ -27,6 +27,7 @@ import (
 
 	"github.com/intelsdi-x/snap-plugin-lib-go/v1/plugin"
 	. "github.com/smartystreets/goconvey/convey"
+	yaml "gopkg.in/yaml.v2"
 )
 
 func TestProcessor(t *testing.T) {
@@ -65,7 +66,9 @@ func TestProcess(t *testing.T) {
 		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
 		matchMap[configAddTags] = tagsTemplates
-		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+		mmYaml, err := yaml.Marshal(matchMap)
+		So(err, ShouldBeNil)
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = string(mmYaml)
 		// e.g.:
 		// config:
 		//  "^feature (?P<feature_name>[A-Za-z0-9]*":
@@ -125,8 +128,10 @@ func TestProcess(t *testing.T) {
 		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
 		matchMap[configAddTags] = tagsTemplates
-		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
-		config["^.eature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+		mmYaml, err := yaml.Marshal(matchMap)
+		So(err, ShouldBeNil)
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = string(mmYaml)
+		config["^.eature (?P<feature_name>[A-Za-z0-9]*)"] = string(mmYaml)
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -176,7 +181,9 @@ func TestProcess(t *testing.T) {
 		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
 		matchMap[configAddTags] = tagsTemplates
-		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+		mmYaml, err := yaml.Marshal(matchMap)
+		So(err, ShouldBeNil)
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = string(mmYaml)
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -226,7 +233,9 @@ func TestProcess(t *testing.T) {
 		tagsTemplates["replaceme"] = "yay: {{ .Tags.feature_name }}"
 		tagsTemplates["replaceme_old"] = "{{ .Tags.replaceme }}"
 		matchMap[configAddTags] = tagsTemplates
-		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = matchMap
+		mmYaml, err := yaml.Marshal(matchMap)
+		So(err, ShouldBeNil)
+		config["^feature (?P<feature_name>[A-Za-z0-9]*)"] = string(mmYaml)
 
 		Convey("Testing with a sample", func() {
 			logs := []string{
@@ -288,7 +297,9 @@ func TestProcess(t *testing.T) {
 		matchMap[configSplitRegexp] = splitRegexps
 		parseRegexps = append(parseRegexps, `.*`)
 		matchMap[configParseRegexp] = parseRegexps
-		config[".*"] = matchMap
+		mmYaml, err := yaml.Marshal(matchMap)
+		So(err, ShouldBeNil)
+		config[".*"] = string(mmYaml)
 
 		Convey("Unexpected metric data type", func() {
 			mts := []plugin.Metric{

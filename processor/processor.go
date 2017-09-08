@@ -26,6 +26,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/intelsdi-x/snap-plugin-lib-go/v1/plugin"
+	yaml "gopkg.in/yaml.v2"
 )
 
 const (
@@ -71,6 +72,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 	var singletonList []plugin.Metric
 	var didMatch bool
 	var parsedMetrics, newMetrics []plugin.Metric
+	var rawRegexCfg map[string]interface{} = make(map[string]interface{})
 
 	for rawRegex, interfaceRegexCfg := range cfg {
 		mapRegex, err = regexp.Compile(rawRegex)
@@ -78,9 +80,15 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			return nil, err
 		}
 
-		rawRegexCfg, ok := interfaceRegexCfg.(map[string]interface{})
+		rawStringRegexCfg, ok := interfaceRegexCfg.(string)
+		if ok {
+			err = yaml.Unmarshal([]byte(rawStringRegexCfg), rawRegexCfg)
+			if err != nil {
+				return nil, err
+			}
+		}
 
-		splitRegexesRaw, ok := rawRegexCfg[configSplitRegexp].([]string)
+		splitRegexesRaw, ok := rawRegexCfg[configSplitRegexp].([]interface{})
 		if ok {
 			splitRegexes, err = compileRegexes(splitRegexesRaw)
 			if err != nil {
@@ -88,7 +96,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			}
 		}
 
-		parseRegexesRaw, ok := rawRegexCfg[configParseRegexp].([]string)
+		parseRegexesRaw, ok := rawRegexCfg[configParseRegexp].([]interface{})
 		if !ok {
 			return nil, fmt.Errorf("Must specify parse regexps at least")
 		}
@@ -97,7 +105,7 @@ func (p *Plugin) Process(metrics []plugin.Metric, cfg plugin.Config) ([]plugin.M
 			return nil, fmt.Errorf("Failed to compile a regex: %v", err)
 		}
 
-		tagTemplatesRaw, ok := rawRegexCfg[configAddTags].(map[string]string)
+		tagTemplatesRaw, ok := rawRegexCfg[configAddTags].(map[interface{}]interface{})
 		if ok {
 			tagsTemplates, err = compileTemplates(tagTemplatesRaw)
 			if err != nil {
@@ -179,9 +187,13 @@ func parse(message string, regexes []*regexp.Regexp) (map[string]string, error) 
 	return fields, nil
 }
 
-func compileRegexes(from []string) ([]*regexp.Regexp, error) {
+func compileRegexes(from []interface{}) ([]*regexp.Regexp, error) {
 	var regexes []*regexp.Regexp
-	for _, expr := range from {
+	for _, iexpr := range from {
+		expr, ok := iexpr.(string)
+		if !ok {
+			return nil, fmt.Errorf("iexpr not a string but %T with value %v", iexpr, iexpr)
+		}
 		regex, err := regexp.Compile(expr)
 		if err != nil {
 			return nil, err
@@ -191,9 +203,13 @@ func compileRegexes(from []string) ([]*regexp.Regexp, error) {
 	return regexes, nil
 }
 
-func compileTemplates(templates map[string]string) (*template.Template, error) {
+func compileTemplates(templates map[interface{}]interface{}) (*template.Template, error) {
 	rootTemplate := template.New("")
-	for tag, tagTemplate := range templates {
+	for iTag, iTagTemplate := range templates {
+		tag, ok := iTag.(string)
+		if !ok {
+			return nil, fmt.Errorf("Tag isn't a string, but a %T with value %v", iTag, iTag)
+		}
 		if tag == "" {
 			// nope
 			continue
@@ -201,6 +217,10 @@ func compileTemplates(templates map[string]string) (*template.Template, error) {
 		newTagTemplate := rootTemplate.New(tag)
 		if newTagTemplate == nil {
 			return nil, fmt.Errorf("Couldn't create template for tag %v", tag)
+		}
+		tagTemplate, ok := iTagTemplate.(string)
+		if !ok {
+			return nil, fmt.Errorf("Template value %v was not a string but a %T", iTagTemplate, iTagTemplate)
 		}
 		newTagTemplate, err := newTagTemplate.Parse(tagTemplate)
 		if err != nil {

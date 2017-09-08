@@ -6,4 +6,4 @@ import:
   subpackages:
   - v1/plugin
   repo: git@github.com:signifai/snap-plugin-lib-go
-
+- package: gopkg.in/yaml.v2
