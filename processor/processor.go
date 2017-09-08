@@ -30,7 +30,7 @@ import (
 
 const (
 	//Name of the plugin
-	Name = "regexp-o-matic"
+	Name = "regexp-engine"
 	//Version of the plugin
 	Version = 1
 
