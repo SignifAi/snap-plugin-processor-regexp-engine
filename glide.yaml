@@ -6,8 +6,4 @@ import:
   subpackages:
   - v1/plugin
   repo: git@github.com:signifai/snap-plugin-lib-go
-testImport:
-- package: github.com/smartystreets/goconvey
-  version: ^1.6.2
-  subpackages:
-  - convey
+

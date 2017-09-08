@@ -1,7 +1,7 @@
 version: 2
 jobs:
   build:
-    working_directory: /go/src/github.com/SignifAi/snap-plugin-processor-split-regexp
+    working_directory: /go/src/github.com/SignifAi/snap-plugin-processor-regexp-engine
     docker:
       - image: circleci/golang:1.8.1
     steps:
@@ -15,3 +15,95 @@ jobs:
             make
             echo "Testing"
             make test-small
+
+            sudo cp build/linux/x86_64/snap-plugin-processor-regexp-engine /srv
+            sudo cp circleci-rpmspec.spec /srv
+      - persist_to_workspace:
+          root: /srv
+          paths:
+            - snap-plugin-processor-regexp-engine
+            - circleci-rpmspec.spec
+  makeRPM:
+    docker:
+      - image: centos:6
+    steps:
+      - attach_workspace:
+          at: /srv
+      - run:
+          command: |
+            # Prepare to build the RPM
+            yum install -y gcc gcc-c++ libtool libtool-ltdl make cmake tar git pkgconfig sudo automake autoconf yum-utils rpm-build
+            yum clean all
+
+            useradd builder -u 1000 -m -G users,wheel
+            echo "builder ALL=(ALL:ALL) NOPASSWD:ALL" >> /etc/sudoers
+            cat >/home/builder/.rpmmacros <<EOF
+            # macros
+            %_topdir /home/builder/rpm
+            %_sourcedir %{_topdir}
+            %_builddir %{_topdir}
+            %_specdir %{_topdir}
+            %_rpmdir %{_topdir}
+            %_srcrpmdir %{_topdir}
+            EOF
+            mkdir /home/builder/rpm
+            chown -R builder /home/builder
+
+            cd /srv
+            VERSION=${CIRCLE_TAG##v}
+
+            # Prepare the RPM spec
+            sed -i "s:VERSION:${VERSION}:g" circleci-rpmspec.spec
+
+            # Place the binary into SOURCES for the 'build'
+            cp /srv/snap-plugin-processor-regexp-engine /home/builder/rpm/
+            chown builder /home/builder/rpm/snap-plugin-processor-regexp-engine
+
+            # Build the RPM
+            su builder -c 'rpmbuild -bb circleci-rpmspec.spec'
+
+            # Copy the RPM(s) back down to the workspace
+            # for later insertion into packagecloud
+            cp ~builder/rpm/x86_64/*.rpm /srv
+      - persist_to_workspace:
+          root: /srv
+          paths:
+            - "*.rpm"
+  pushRPM:
+    docker:
+      - image: circleci/ruby:2.1
+    steps:
+      - attach_workspace:
+          at: /tmp
+      - run:
+          command: |
+            gem install package_cloud
+            for i in /tmp/*.rpm; do
+                package_cloud push signifai/snap/el/6 $i
+            done
+workflows:
+  version: 2
+  build2pushRPM:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^v.*/
+      - makeRPM:
+          requires:
+            - build
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+      - pushRPM:
+          requires:
+            - build
+            - makeRPM
+          filters:
+            tags:
+              only: /^v.*/
+            branches:
+              ignore: /.*/
+  
