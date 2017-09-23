@@ -265,6 +265,7 @@ do some additional processing/tag-setting with
 and the values are golang templates (see the documentation linked) that
 provide the intended values for a tag. For instance:
 
+
 ```
 config:
   "instanceHostname\": \"(?P<host>[^\"]+)\":
@@ -273,6 +274,7 @@ config:
       - "instanceHttpPort\": (?P<port>)"
     template:
       url: "http://{{ .Tags.host }}:{{ .Tags.port }}/"
+```
 
 ### Roadmap
 
